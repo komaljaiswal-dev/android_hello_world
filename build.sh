@@ -1,0 +1,191 @@
+#!/bin/bash
+
+# Source BuildPiper functions
+source /opt/buildpiper/shell-functions/functions.sh
+source /opt/buildpiper/shell-functions/log-functions.sh
+
+# Set codebase location
+CODEBASE_LOCATION="${WORKSPACE}"/"${CODEBASE_DIR}"
+
+logInfoMessage "=========================================="
+logInfoMessage " BuildPiper Fastlane Deployment Pipeline"
+logInfoMessage "=========================================="
+
+logInfoMessage "Codebase Location: [$CODEBASE_LOCATION]"
+logInfoMessage "Platform: [$PLATFORM]"
+logInfoMessage "Fastlane Mode: [$FASTLANE_MODE]"
+
+# Sleep if configured
+if [ "$SLEEP_DURATION" -gt 0 ]; then
+    logInfoMessage "Sleeping for ${SLEEP_DURATION} seconds..."
+    sleep $SLEEP_DURATION
+fi
+
+# Navigate to platform directory
+cd "${CODEBASE_LOCATION}/${PLATFORM}"
+
+if [ $? -ne 0 ]; then
+    logErrorMessage "Failed to navigate to directory: ${CODEBASE_LOCATION}/${PLATFORM}"
+    saveTaskStatus 1 ${ACTIVITY_SUB_TASK_CODE}
+    exit 1
+fi
+
+logInfoMessage "Current directory: $(pwd)"
+
+# Function to execute fastlane instruction
+execute_fastlane_instruction() {
+    logInfoMessage "Executing Fastlane instruction: [$INSTRUCTION]"
+    
+    fastlane $INSTRUCTION
+    TASK_STATUS=$?
+    
+    if [ $TASK_STATUS -eq 0 ]; then
+        logSuccessMessage " Fastlane instruction [$INSTRUCTION] completed successfully!"
+    else
+        logErrorMessage " Fastlane instruction [$INSTRUCTION] failed with status: $TASK_STATUS"
+    fi
+    
+    return $TASK_STATUS
+}
+
+# Function to execute fastlane supply
+execute_fastlane_supply() {
+    logInfoMessage "=========================================="
+    logInfoMessage " Executing Fastlane Supply"
+    logInfoMessage "=========================================="
+    
+    # Validate required parameters
+    if [ -z "$PACKAGE_NAME" ]; then
+        logErrorMessage " Error: PACKAGE_NAME is required for fastlane supply"
+        return 1
+    fi
+    
+    # Check if JSON key exists
+    if [ ! -f "${JSON_KEY_PATH}" ]; then
+        logErrorMessage " Error: JSON key file not found at ${JSON_KEY_PATH}"
+        logInfoMessage " Please ensure the service account key is available"
+        return 1
+    fi
+    
+    # Build the fastlane supply command
+    SUPPLY_CMD="fastlane supply"
+    
+    # Determine build artifact
+    if [ "$BUILD_TYPE" = "apk" ]; then
+        if [ ! -f "${APK_PATH}" ]; then
+            logErrorMessage " Error: APK file not found at ${APK_PATH}"
+            logInfoMessage " Available APK files:"
+            find . -name "*.apk" -type f || true
+            return 1
+        fi
+        SUPPLY_CMD="${SUPPLY_CMD} --apk ${APK_PATH}"
+        logInfoMessage "📱 Using APK: ${APK_PATH}"
+    elif [ "$BUILD_TYPE" = "aab" ]; then
+        if [ ! -f "${AAB_PATH}" ]; then
+            logErrorMessage " Error: AAB file not found at ${AAB_PATH}"
+            logInfoMessage " Available AAB files:"
+            find . -name "*.aab" -type f || true
+            return 1
+        fi
+        SUPPLY_CMD="${SUPPLY_CMD} --aab ${AAB_PATH}"
+        logInfoMessage " Using AAB: ${AAB_PATH}"
+    else
+        logErrorMessage " Error: Invalid BUILD_TYPE: ${BUILD_TYPE}. Must be 'apk' or 'aab'"
+        return 1
+    fi
+    
+    # Add track
+    SUPPLY_CMD="${SUPPLY_CMD} --track ${RELEASE_TRACK}"
+    logInfoMessage " Release Track: ${RELEASE_TRACK}"
+    
+    # Add rollout percentage if specified (for production)
+    if [ ! -z "$ROLLOUT_PERCENTAGE" ] && [ "$ROLLOUT_PERCENTAGE" != "0" ]; then
+        ROLLOUT_DECIMAL=$(echo "scale=2; ${ROLLOUT_PERCENTAGE} / 100" | bc)
+        SUPPLY_CMD="${SUPPLY_CMD} --rollout ${ROLLOUT_DECIMAL}"
+        logInfoMessage " Rollout Percentage: ${ROLLOUT_PERCENTAGE}%"
+    fi
+    
+    # Add JSON key and package name
+    SUPPLY_CMD="${SUPPLY_CMD} --json_key ${JSON_KEY_PATH}"
+    SUPPLY_CMD="${SUPPLY_CMD} --package_name ${PACKAGE_NAME}"
+    
+    logInfoMessage " Package Name: ${PACKAGE_NAME}"
+    
+    # Add optional skip flags
+    if [ "$SKIP_UPLOAD_SCREENSHOTS" = "true" ]; then
+        SUPPLY_CMD="${SUPPLY_CMD} --skip_upload_screenshots true"
+    fi
+    
+    if [ "$SKIP_UPLOAD_IMAGES" = "true" ]; then
+        SUPPLY_CMD="${SUPPLY_CMD} --skip_upload_images true"
+    fi
+    
+    if [ "$SKIP_UPLOAD_METADATA" = "true" ]; then
+        SUPPLY_CMD="${SUPPLY_CMD} --skip_upload_metadata true"
+    fi
+    
+    logInfoMessage ""
+    logInfoMessage " Executing command:"
+    logInfoMessage "${SUPPLY_CMD}"
+    logInfoMessage ""
+    
+    # Execute the command
+    eval ${SUPPLY_CMD}
+    TASK_STATUS=$?
+    
+    if [ $TASK_STATUS -eq 0 ]; then
+        logSuccessMessage "=========================================="
+        logSuccessMessage " Successfully uploaded to ${RELEASE_TRACK}!"
+        logSuccessMessage "=========================================="
+        if [ ! -z "$ROLLOUT_PERCENTAGE" ] && [ "$ROLLOUT_PERCENTAGE" != "0" ]; then
+            logInfoMessage " Rollout: ${ROLLOUT_PERCENTAGE}% of users"
+        fi
+    else
+        logErrorMessage " Fastlane supply failed with status: $TASK_STATUS"
+    fi
+    
+    return $TASK_STATUS
+}
+
+# Main execution logic based on FASTLANE_MODE
+case "$FASTLANE_MODE" in
+    instruction)
+        # Original BuildPiper mode - execute fastlane instruction
+        logInfoMessage "Mode: Fastlane Instruction"
+        execute_fastlane_instruction
+        TASK_STATUS=$?
+        ;;
+    supply)
+        # New mode - execute fastlane supply directly
+        logInfoMessage "Mode: Fastlane Supply"
+        execute_fastlane_supply
+        TASK_STATUS=$?
+        ;;
+    both)
+        # Execute instruction first, then supply
+        logInfoMessage "Mode: Both (Instruction + Supply)"
+        
+        execute_fastlane_instruction
+        TASK_STATUS=$?
+        
+        if [ $TASK_STATUS -eq 0 ]; then
+            logInfoMessage ""
+            logInfoMessage "Proceeding to upload..."
+            execute_fastlane_supply
+            TASK_STATUS=$?
+        else
+            logErrorMessage "Skipping supply due to instruction failure"
+        fi
+        ;;
+    *)
+        logErrorMessage " Invalid FASTLANE_MODE: ${FASTLANE_MODE}"
+        logInfoMessage "Valid modes: instruction, supply, both"
+        TASK_STATUS=1
+        ;;
+esac
+
+# Save task status
+saveTaskStatus ${TASK_STATUS} ${ACTIVITY_SUB_TASK_CODE}
+
+# Exit with task status
+exit $TASK_STATUS
