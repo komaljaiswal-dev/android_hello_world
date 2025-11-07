@@ -74,7 +74,7 @@ ENV FASTLANE_MODE="instruction"
 #   - both: Execute instruction then supply
 
 # Fastlane Supply variables
-ENV PACKAGE_NAME=""
+ENV PACKAGE_NAME="org.opstree.app"
 ENV BUILD_TYPE="apk"
 # Options: apk, aab
 
