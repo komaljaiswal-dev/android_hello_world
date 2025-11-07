@@ -48,6 +48,27 @@ execute_fastlane_instruction() {
     return $TASK_STATUS
 }
 
+# Function to decode and save Play Store key
+decode_playstore_key() {
+    if [ ! -z "$KEY" ]; then
+        logInfoMessage "Decoding KEY and saving to fastlane/playstore-key.json..."
+        
+        # Decode base64 KEY and save to file
+        echo "$KEY" | base64 --decode > fastlane/playstore-key.json
+        
+        if [ $? -eq 0 ]; then
+            logSuccessMessage "Successfully decoded and saved playstore key"
+            return 0
+        else
+            logErrorMessage "Failed to decode KEY variable"
+            return 1
+        fi
+    else
+        logInfoMessage "No KEY environment variable found, skipping key decode"
+        return 0
+    fi
+}
+
 # Function to execute fastlane supply
 execute_fastlane_supply() {
     logInfoMessage "=========================================="
@@ -154,6 +175,11 @@ case "$FASTLANE_MODE" in
         logInfoMessage "Mode: Fastlane Instruction"
         execute_fastlane_instruction
         TASK_STATUS=$?
+        
+        if [ $TASK_STATUS -eq 0 ]; then
+            decode_playstore_key
+            TASK_STATUS=$?
+        fi
         ;;
     supply)
         # New mode - execute fastlane supply directly
@@ -169,12 +195,17 @@ case "$FASTLANE_MODE" in
         TASK_STATUS=$?
         
         if [ $TASK_STATUS -eq 0 ]; then
-            logInfoMessage ""
-            logInfoMessage "Proceeding to upload..."
-            execute_fastlane_supply
+            decode_playstore_key
             TASK_STATUS=$?
+            
+            if [ $TASK_STATUS -eq 0 ]; then
+                logInfoMessage ""
+                logInfoMessage "Proceeding to upload..."
+                execute_fastlane_supply
+                TASK_STATUS=$?
+            fi
         else
-            logErrorMessage "Skipping supply due to instruction failure"
+            logErrorMessage "Skipping key decode and supply due to instruction failure"
         fi
         ;;
     *)
