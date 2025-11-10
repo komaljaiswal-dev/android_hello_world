@@ -1,5 +1,6 @@
 FROM gradle:7.5.1-jdk11
 WORKDIR /bp/workspace
+
 # Install system dependencies
 USER root
 
@@ -36,7 +37,6 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-
 # Verify Ruby version
 RUN ruby --version
 
@@ -59,12 +59,26 @@ ADD BP-BASE-SHELL-STEPS /opt/buildpiper/shell-functions/
 # Make shell functions executable
 RUN chmod +x /opt/buildpiper/shell-functions/*.sh
 
+# Copy build.sh script
+COPY build.sh /usr/local/bin/build.sh
+
+# Make build.sh executable
+RUN chmod +x /usr/local/bin/build.sh
+
+# IMPORTANT: Copy your Android project into the container
+# This copies everything from your current directory to /bp/workspace/
+COPY . /bp/workspace/
+
 # Set BuildPiper environment variables
 ENV ACTIVITY_SUB_TASK_CODE="BP-FASTLANE-TASK"
-ENV SLEEP_DURATION="5s"
+ENV SLEEP_DURATION="0"
 ENV VALIDATION_FAILURE_ACTION="WARNING"
 ENV INSTRUCTION="fastlane init"
-ENV PLATFORM="android"
+
+# BuildPiper workspace configuration
+ENV WORKSPACE="/bp/workspace"
+ENV CODEBASE_DIR=""
+ENV PLATFORM=""
 
 # Fastlane execution mode
 ENV FASTLANE_MODE="instruction"
@@ -87,7 +101,6 @@ ENV ROLLOUT_PERCENTAGE=""
 ENV JSON_KEY_PATH="fastlane/playstore-key.json"
 ENV APK_PATH="app/build/outputs/apk/release/app-release.apk"
 ENV AAB_PATH="app/build/outputs/bundle/release/app-release.aab"
+RUN chmod +x ./build.sh
 
-
-# Entry point
-ENTRYPOINT ["build.sh"]
+ENTRYPOINT ["./build.sh"]
