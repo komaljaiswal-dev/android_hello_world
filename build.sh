@@ -5,8 +5,8 @@ source /opt/buildpiper/shell-functions/functions.sh
 source /opt/buildpiper/shell-functions/log-functions.sh
 
 # Set codebase location
-CODEBASE_LOCATION="/bp/workspace/"${CODEBASE_DIR}"
-
+CODEBASE_LOCATION="/bp/workspace/${CODEBASE_DIR}"
+sleep 1000
 echo "$CODEBASE_LOCATION"
 logInfoMessage "=========================================="
 logInfoMessage " BuildPiper Fastlane Deployment Pipeline"
@@ -213,9 +213,9 @@ case "$FASTLANE_MODE" in
         execute_fastlane_supply
         TASK_STATUS=$?
         ;;
+
     both)
-        logInfoMessage "Mode: Both (Instruction + Supply)"
-        
+        logInfoMessage "Mode: Both - Instruction and Supply"       
         execute_fastlane_instruction
         TASK_STATUS=$?
         
@@ -234,8 +234,6 @@ case "$FASTLANE_MODE" in
         fi
         ;;
     *)
-        logErrorMessage "Invalid FASTLANE_MODE: ${FASTLANE_MODE}"
-        logInfoMessage "Valid modes: instruction, supply, both"
         TASK_STATUS=1
         ;;
 esac
