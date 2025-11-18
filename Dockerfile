@@ -101,6 +101,6 @@ ENV ROLLOUT_PERCENTAGE=""
 ENV JSON_KEY_PATH="fastlane/playstore-key.json"
 ENV APK_PATH="app/build/outputs/apk/release/app-release.apk"
 ENV AAB_PATH="app/build/outputs/bundle/release/app-release.aab"
-RUN chmod +x ./build.sh
+RUN chmod +x /usr/local/bin/build.sh
 
-ENTRYPOINT ["./build.sh"]
+ENTRYPOINT ["/usr/local/bin/build.sh"]
